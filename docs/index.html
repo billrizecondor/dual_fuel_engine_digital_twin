@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dual-Fuel Engine Digital Twin · Billriz Condor</title>
+  <meta name="description" content="Run the digital twin of an 18 kW biogas/diesel dual-fuel engine in your browser: ML predictions of efficiency and exhaust temperature plus fuel mass flows.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230b1f3a'/><text x='16' y='21' font-family='Arial,sans-serif' font-size='13' font-weight='700' fill='%23ffffff' text-anchor='middle'>BC</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/demo.css">
+  <style>
+    .twin { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 24px; align-items: start; }
+    @media (max-width: 860px) { .twin { grid-template-columns: 1fr; } }
+    .twin .controls { flex-direction: column; align-items: stretch; margin: 0; }
+    .twin .control { min-width: 0; }
+    .engine { width: 100%; height: auto; display: block; }
+    .engine .block { fill: color-mix(in srgb, var(--faint) 22%, var(--surface)); stroke: var(--faint); stroke-width: 1.5; }
+    .engine .cyl { fill: var(--surface); stroke: var(--faint); stroke-width: 1.2; }
+    .engine .alt { fill: color-mix(in srgb, var(--accent) 16%, var(--surface)); stroke: var(--accent); stroke-width: 1.5; }
+    .engine .pipe { fill: none; stroke-width: 10; stroke-linecap: round; }
+    .engine .lbl { font: 600 11px "IBM Plex Sans", system-ui, sans-serif; fill: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+    .engine .val { font: 600 15px "IBM Plex Sans", system-ui, sans-serif; fill: var(--ink); }
+    .engine .sub { font: 400 12px "IBM Plex Sans", system-ui, sans-serif; fill: var(--muted); }
+    .engine .tag { fill: var(--surface); stroke: var(--line); }
+    .engine .piston { fill: var(--faint); }
+    .pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+    .pipeline div { border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; background: var(--surface); }
+    .pipeline small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+    .pipeline b { display: block; }
+    .pipeline span { color: var(--muted); font-size: 14px; }
+    .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 18px; }
+    .grid3 .card + .card { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a href="https://billrizecondor.github.io/">← Billriz Condor · Portfolio</a>
+      <div class="right">
+        <a class="hide-sm" href="https://github.com/billrizecondor/dual_fuel_engine_digital_twin">Source on GitHub</a>
+        <button class="theme-btn" type="button" aria-label="Toggle dark mode">◐</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero-band"><div class="wrap hero">
+      <p class="eyebrow">Digital twin · machine learning · energy systems</p>
+      <h1>A digital twin of a biogas dual-fuel engine</h1>
+      <p class="lede">An 18 kW, four-cylinder generator (Cat C2.2-based DE18E3) converted to run on <b>biogas with a diesel pilot</b>. Machine-learning models trained on 1,750 measured operating points predict its efficiency and exhaust temperature, and an energy balance works out the fuel it needs. Set a power output and diesel share below to run the twin.</p>
+      <div class="meta"><span><b>Team</b> Billriz Condor, Hafeez Bashir, Kien van Ho</span><span><b>Programme</b> PM3E/ME3+, IMT Atlantique Nantes</span><span><b>Date</b> June 2025</span></div>
+      <div class="btns">
+        <a class="btn primary" href="#twin">Run the twin</a>
+        <a class="btn" href="https://github.com/billrizecondor/dual_fuel_engine_digital_twin/blob/main/Project%20Report%20GDocs%20Version%20(1).pdf">Read the report (PDF)</a>
+        <a class="btn" href="#code">See the code</a>
+      </div>
+    </div></div>
+
+    <div class="wrap"><div class="stats" id="heroStats"></div></div>
+
+    <section id="twin">
+      <div class="wrap">
+        <div class="sec-head"><h2>Run the twin</h2><p>Choose a load and a diesel energy share (DES). The twin predicts efficiency with the KNN model and exhaust temperature with the regression model, then solves the energy balance for the diesel and methane flows.</p></div>
+        <div class="card">
+          <div class="twin">
+            <div>
+              <div class="controls">
+                <label class="control">Electrical power output <output id="o-power"></output>
+                  <input type="range" id="power" min="0.5" max="14" step="0.25" value="10"></label>
+                <label class="control">Diesel energy share (DES) <output id="o-des"></output>
+                  <input type="range" id="des" min="4" max="40" step="0.5" value="8"></label>
+              </div>
+              <div class="table-wrap" id="cmpTable"></div>
+              <p class="note" id="cmpNote"></p>
+            </div>
+            <svg class="engine" viewBox="0 0 560 360" role="img" aria-label="Schematic of the dual-fuel engine with live sensor readings">
+              <!-- pipes -->
+              <path class="pipe" d="M20 250 H120 V215" stroke="var(--s4)"/>
+              <path class="pipe" d="M20 310 H150 V260" stroke="var(--faint)"/>
+              <path class="pipe" d="M260 120 V60 H540" stroke="var(--s8)"/>
+              <!-- engine block + cylinders -->
+              <rect class="block" x="110" y="120" width="260" height="150" rx="8"/>
+              <g id="cyls"></g>
+              <!-- alternator -->
+              <line x1="370" y1="195" x2="400" y2="195" stroke="var(--faint)" stroke-width="6"/>
+              <rect class="alt" x="400" y="150" width="120" height="90" rx="8"/>
+              <text class="lbl" x="460" y="190" text-anchor="middle">Alternator</text>
+              <text class="val" id="t-alt" x="460" y="214" text-anchor="middle"></text>
+              <!-- sensor tags -->
+              <g><rect class="tag" x="4" y="178" width="100" height="54" rx="6"/><text class="lbl" x="14" y="197">Biogas CH₄</text><text class="val" id="t-ch4" x="14" y="220"></text></g>
+              <g><rect class="tag" x="18" y="322" width="190" height="34" rx="6"/><text class="lbl" x="30" y="344">Diesel</text><text class="val" id="t-diesel" x="82" y="344"></text></g>
+              <g><rect class="tag" x="300" y="10" width="160" height="40" rx="6"/><text class="lbl" x="312" y="34">Exhaust</text><text class="val" id="t-exh" x="378" y="35"></text></g>
+              <g><rect class="tag" x="396" y="256" width="148" height="54" rx="6"/><text class="lbl" x="408" y="275">Efficiency</text><text class="val" id="t-eff" x="408" y="298"></text></g>
+              <text class="sub" x="240" y="292" text-anchor="middle">4-cylinder dual-fuel engine</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="sec-head"><h2>Operating maps</h2><p>Grey points are the 1,750 measured operating points. The line is the trained model and the orange marker is your current setting, as in the original Python dashboard.</p></div>
+        <div class="grid3">
+          <div class="card"><h3>Electrical efficiency</h3><p class="note">% vs. power output (KNN model)</p><div class="chart-box"><canvas id="effChart" aria-label="Efficiency vs power scatter with KNN curve"></canvas></div></div>
+          <div class="card"><h3>Fuel mass flows</h3><p class="note">kg/h vs. power output</p><div class="legend" id="flowLegend"></div><div class="chart-box"><canvas id="flowChart" aria-label="Fuel mass flows vs power"></canvas></div></div>
+          <div class="card"><h3>Exhaust gas temperature</h3><p class="note">°C vs. power output (linear regression)</p><div class="chart-box"><canvas id="exhChart" aria-label="Exhaust temperature vs power with regression line"></canvas></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="sec-head"><h2>Model validation</h2><p>Predicted vs. measured values using 5-fold cross-validation, so each point is predicted by a model that never saw it. Points on the diagonal are perfect predictions.</p></div>
+        <div class="grid2">
+          <div class="card"><h3>Efficiency: KNN regression</h3><p class="note" id="effMetrics"></p><div class="chart-box"><canvas id="effVal" aria-label="Predicted vs actual efficiency"></canvas></div></div>
+          <div class="card"><h3>Exhaust temperature: linear regression</h3><p class="note" id="exhMetrics"></p><div class="chart-box"><canvas id="exhVal" aria-label="Predicted vs actual exhaust temperature"></canvas></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="sec-head"><h2>How the twin works</h2></div>
+        <div class="pipeline">
+          <div><small>1 · Data</small><b>Engine mapping</b><span>53 test runs from 0 to 14 kW and 40–70% methane, cleaned into one dataset</span></div>
+          <div><small>2 · Physics</small><b>Engine equations</b><span>Methane content, CH₄ mass flow, diesel energy share and electrical efficiency from the sensor readings</span></div>
+          <div><small>3 · Machine learning</small><b>Predictive models</b><span>Tuned KNN for efficiency (non-linear) and linear regression for exhaust temperature</span></div>
+          <div><small>4 · Visualisation</small><b>3D twin</b><span>Blender CAD model with sensor tags, deployed on the GreenTwin web platform via Azure and FastAPI</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="code">
+      <div class="wrap">
+        <div class="sec-head"><h2>How it's calculated</h2><p>This script trains the same models as the project's Tkinter dashboard, cross-validates them, and exports the model parameters and data this page runs on. The twin above re-implements the KNN prediction and the energy balance in JavaScript.</p></div>
+        <div class="card">
+          <div class="code-head"><code>analysis/build_demo_data.py</code><a href="https://github.com/billrizecondor/dual_fuel_engine_digital_twin/blob/main/analysis/build_demo_data.py">Open on GitHub →</a></div>
+          <div class="code"><pre id="codeView">Loading…</pre></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>© Billriz Condor, Hafeez Bashir, Kien van Ho · IMT Atlantique · Engine-mapping data from the project's test bench.</p>
+      <p><a href="https://billrizecondor.github.io/">Back to portfolio</a></p>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="assets/demo.js"></script>
+  <script>
+  (async function () {
+    const { chart, fmt, axes, css } = Demo;
+    const m = await (await fetch('data/twin_model.json')).json();
+    const P = m.points, N = P.power.length;
+    const LHV = m.constants;
+
+    // ---- models (same as analysis/build_demo_data.py)
+    const order = [...Array(N).keys()];
+    function knnEfficiency(power) {
+      const d = order.map((i) => [Math.abs(P.power[i] - power), i]).sort((a, b) => a[0] - b[0]).slice(0, m.knn.k);
+      if (m.knn.weights === 'distance') {
+        const exact = d.find((x) => x[0] === 0);
+        if (exact) return P.efficiency[exact[1]];
+        const w = d.map((x) => 1 / x[0]);
+        return d.reduce((s, x, j) => s + w[j] * P.efficiency[x[1]], 0) / w.reduce((a, b) => a + b, 0);
+      }
+      return d.reduce((s, x) => s + P.efficiency[x[1]], 0) / d.length;
+    }
+    const exhaust = (power) => m.exhaust_lr.slope * power + m.exhaust_lr.intercept;
+    function flows(power, eff, des) {
+      const q = power / eff * 3.6;                     // MJ/h fuel energy
+      return { total: q, diesel: des * q / LHV.lhv_diesel, ch4: (1 - des) * q / LHV.lhv_ch4 };
+    }
+    // Average of the measured points within ±0.5 kW (falls back to the nearest point).
+    function measuredNear(power) {
+      let idx = order.filter((i) => Math.abs(P.power[i] - power) <= 0.5);
+      if (!idx.length) { let b = 0; for (let i = 1; i < N; i++) if (Math.abs(P.power[i] - power) < Math.abs(P.power[b] - power)) b = i; idx = [b]; }
+      const avg = (a) => idx.reduce((s, i) => s + a[i], 0) / idx.length;
+      return { n: idx.length, power: avg(P.power), efficiency: avg(P.efficiency), exhaust: avg(P.exhaust), diesel: avg(P.diesel), ch4: avg(P.ch4), des: avg(P.des) };
+    }
+
+    // ---- hero tiles
+    document.getElementById('heroStats').innerHTML = [
+      ['Measured operating points', fmt.int(N), m.n_runs + ' test runs · 0–14 kW · 40–70% CH₄'],
+      ['Efficiency model', 'R² ' + m.knn.metrics.train.r2, 'KNN, k = ' + m.knn.k + ' · ' + m.knn.metrics.cv.r2 + ' cross-validated'],
+      ['Exhaust-temperature model', 'R² ' + m.exhaust_lr.metrics.cv.r2, 'linear in power output'],
+      ['Engine', '18 kW', '4-cylinder, biogas + diesel pilot'],
+    ].map(([l, v, s]) => `<div class="stat"><div class="label">${l}</div><div class="value">${v}</div><div class="sub">${s}</div></div>`).join('');
+
+    // ---- engine schematic: cylinders with pistons that move with load
+    const cylG = document.getElementById('cyls');
+    cylG.innerHTML = [0, 1, 2, 3].map((i) => `<rect class="cyl" x="${135 + i * 58}" y="140" width="40" height="95" rx="4"/><rect class="piston" id="pist${i}" x="${139 + i * 58}" y="200" width="32" height="20" rx="2"/>`).join('');
+    let phase = 0, speed = 0, raf;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function animate() {
+      phase += speed;
+      for (let i = 0; i < 4; i++) {
+        const y = 170 + 30 * (0.5 + 0.5 * Math.sin(phase + i * Math.PI / 2));
+        document.getElementById('pist' + i).setAttribute('y', y.toFixed(1));
+      }
+      raf = requestAnimationFrame(animate);
+    }
+    if (!reduce) animate();
+
+    // ---- controls & outputs
+    const powerEl = document.getElementById('power'), desEl = document.getElementById('des');
+    const state = () => {
+      const power = +powerEl.value, des = +desEl.value / 100;
+      const eff = knnEfficiency(power);
+      return { power, des, eff, temp: exhaust(power), f: flows(power, eff / 100, des), c: measuredNear(power) };
+    };
+
+    function drawOutputs() {
+      const s = state();
+      document.getElementById('o-power').textContent = fmt.dec(s.power, 2) + ' kW';
+      document.getElementById('o-des').textContent = fmt.dec(s.des * 100, 1) + '%';
+      document.getElementById('t-ch4').textContent = fmt.dec(s.f.ch4, 2) + ' kg/h';
+      document.getElementById('t-diesel').textContent = fmt.dec(s.f.diesel, 2) + ' kg/h · DES ' + fmt.dec(s.des * 100, 1) + '%';
+      document.getElementById('t-exh').textContent = fmt.int(s.temp) + ' °C';
+      document.getElementById('t-eff').textContent = fmt.dec(s.eff, 2) + '%';
+      document.getElementById('t-alt').textContent = fmt.dec(s.power, 2) + ' kW';
+      speed = 0.02 + s.power * 0.012;
+      const c = s.c;
+      const rows = [
+        ['Power output (kW)', fmt.dec(s.power, 2), fmt.dec(c.power, 2)],
+        ['Electrical efficiency (%)', fmt.dec(s.eff, 2), fmt.dec(c.efficiency, 2)],
+        ['Exhaust temperature (°C)', fmt.dec(s.temp, 1), fmt.dec(c.exhaust, 1)],
+        ['Diesel flow (kg/h)', fmt.dec(s.f.diesel, 2), fmt.dec(c.diesel, 2)],
+        ['CH₄ flow (kg/h)', fmt.dec(s.f.ch4, 2), fmt.dec(c.ch4, 2)],
+        ['DES (%)', fmt.dec(s.des * 100, 1), fmt.dec(c.des, 1)],
+        ['Fuel energy in (MJ/h)', fmt.dec(s.f.total, 1), '–'],
+      ];
+      document.getElementById('cmpTable').innerHTML = '<table><thead><tr><th>Parameter</th><th class="num">Twin</th><th class="num">Measured (avg)</th></tr></thead><tbody>' +
+        rows.map((r) => `<tr><td>${r[0]}</td><td class="num"><b>${r[1]}</b></td><td class="num">${r[2]}</td></tr>`).join('') + '</tbody></table>';
+      document.getElementById('cmpNote').textContent = `Measured (avg) is the mean of the ${c.n} recorded operating point${c.n === 1 ? '' : 's'} within ±0.5 kW of your setting. Measured fuel flows reflect the diesel share used in those tests.`;
+    }
+
+    // ---- charts
+    const measured = (ys) => P.power.map((x, i) => ({ x, y: ys[i] }));
+    const grey = () => css('--faint') + '55';
+    const xs = Array.from({ length: 57 }, (_, i) => i * 0.25);
+    const scatterScales = (ytitle, extra = {}) => axes({
+      x: Object.assign({ type: 'linear', min: 0, max: 14.5, grid: { display: false }, title: { display: true, text: 'Power output (kW)' } }, extra.x || {}),
+      y: Object.assign({ title: { display: true, text: ytitle } }, extra.y || {}),
+    });
+    const marker = (x, y, color) => ({ type: 'scatter', label: 'Current setting', data: [{ x, y }], backgroundColor: color, borderColor: css('--surface'), borderWidth: 2, pointRadius: 8, pointHoverRadius: 9, order: 0 });
+    const cloud = (data, color) => ({ type: 'scatter', label: 'Measured', data, backgroundColor: color, pointRadius: 2.5, pointHoverRadius: 4, order: 3 });
+    const tip = (unit, d = 2) => ({ callbacks: { label: (c) => ` ${c.dataset.label}: ${fmt.dec(c.parsed.y, d)} ${unit} at ${fmt.dec(c.parsed.x, 2)} kW` } });
+
+    const effChart = chart('effChart', ({ series }) => {
+      const s = state();
+      return { type: 'scatter', data: { datasets: [
+        marker(s.power, s.eff, series[1]),
+        { type: 'line', label: 'KNN model', data: xs.map((x) => ({ x, y: knnEfficiency(x) })), borderColor: series[0], borderWidth: 2, pointRadius: 0, order: 1 },
+        cloud(measured(P.efficiency), grey()),
+      ] }, options: { scales: scatterScales('Efficiency (%)', { y: { min: 0 } }), plugins: { tooltip: tip('%') } } };
+    });
+
+    function flowLegend() {
+      const s = Demo.series();
+      document.getElementById('flowLegend').innerHTML = [['Diesel', s[0]], ['CH₄', s[2]], ['Current setting', s[1]]].map(([l, c]) => `<span><i style="background:${c};border-radius:50%"></i>${l}</span>`).join('');
+    }
+    flowLegend(); document.addEventListener('themechange', flowLegend);
+    const flowChart = chart('flowChart', ({ series }) => {
+      const s = state();
+      return { type: 'scatter', data: { datasets: [
+        Object.assign(marker(s.power, s.f.diesel, series[1]), { label: 'Diesel (twin)' }),
+        Object.assign(marker(s.power, s.f.ch4, series[1]), { label: 'CH₄ (twin)' }),
+        Object.assign(cloud(measured(P.diesel), series[0] + '66'), { label: 'Diesel measured' }),
+        Object.assign(cloud(measured(P.ch4), series[2] + '66'), { label: 'CH₄ measured' }),
+      ] }, options: { scales: scatterScales('Mass flow (kg/h)', { y: { min: 0 } }), plugins: { tooltip: tip('kg/h') } } };
+    });
+
+    const exhChart = chart('exhChart', ({ series }) => {
+      const s = state();
+      return { type: 'scatter', data: { datasets: [
+        marker(s.power, s.temp, series[1]),
+        { type: 'line', label: 'Regression', data: [{ x: 0, y: exhaust(0) }, { x: 14.5, y: exhaust(14.5) }], borderColor: series[0], borderWidth: 2, pointRadius: 0, order: 1 },
+        cloud(measured(P.exhaust), grey()),
+      ] }, options: { scales: scatterScales('Exhaust temperature (°C)'), plugins: { tooltip: tip('°C', 0) } } };
+    });
+
+    // ---- validation charts
+    function valChart(id, actual, pred, unit, lo, hi) {
+      chart(id, ({ series }) => ({
+        type: 'scatter',
+        data: { datasets: [
+          { type: 'line', label: 'Perfect prediction', data: [{ x: lo, y: lo }, { x: hi, y: hi }], borderColor: css('--faint'), borderWidth: 1, pointRadius: 0 },
+          { label: 'Test point', data: actual.map((a, i) => ({ x: a, y: pred[i] })), backgroundColor: series[0] + '66', pointRadius: 2.5, pointHoverRadius: 4 },
+        ] },
+        options: {
+          scales: axes({ x: { type: 'linear', min: lo, max: hi, grid: { display: false }, title: { display: true, text: 'Measured ' + unit } }, y: { min: lo, max: hi, title: { display: true, text: 'Predicted ' + unit } } }),
+          plugins: { tooltip: { callbacks: { label: (c) => ` measured ${fmt.dec(c.parsed.x, 1)}, predicted ${fmt.dec(c.parsed.y, 1)}` } } },
+        },
+      }));
+    }
+    valChart('effVal', P.efficiency, P.efficiency_cv_pred, '(%)', 0, 20);
+    valChart('exhVal', P.exhaust, P.exhaust_cv_pred, '(°C)', 100, 480);
+    const mt = (x) => `Cross-validated R² ${x.cv.r2} · RMSE ${x.cv.rmse} · training R² ${x.train.r2}`;
+    document.getElementById('effMetrics').textContent = mt(m.knn.metrics) + ' · k = ' + m.knn.k + ', ' + m.knn.weights + ' weights, Manhattan distance';
+    document.getElementById('exhMetrics').textContent = mt(m.exhaust_lr.metrics) + ` · T = ${fmt.dec(m.exhaust_lr.slope, 2)} × P + ${fmt.dec(m.exhaust_lr.intercept, 1)}`;
+
+    function refresh() { drawOutputs(); effChart.update(); flowChart.update(); exhChart.update(); }
+    [powerEl, desEl].forEach((el) => el.addEventListener('input', refresh));
+    drawOutputs();
+
+    Demo.loadCode('codeView', 'dual_fuel_engine_digital_twin', 'analysis/build_demo_data.py');
+  })();
+  </script>
+</body>
+</html>
